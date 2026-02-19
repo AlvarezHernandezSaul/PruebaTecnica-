@@ -1,4 +1,7 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import axios from "axios";
+
+const API_URL = "http://127.0.0.1:8000/api/tasks"; 
 
 const styles = `
   body {
@@ -108,15 +111,64 @@ const styles = `
 export default function App() {
   const [tasks, setTasks] = useState([]);
   const [newTask, setNewTask] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
-  const createTask = () => {
-    if (!newTask.trim()) return;
-    setTasks([...tasks, { id: Date.now(), title: newTask.trim(), completed: false }]);
-    setNewTask("");
+ 
+  useEffect(() => {
+    fetchTasks();
+  }, []);
+
+  const fetchTasks = async () => {
+    try {
+      setLoading(true);
+      const response = await axios.get(API_URL);
+      setTasks(response.data);
+      setError(null);
+    } catch (err) {
+      console.error("Error al cargar tareas:", err);
+      setError("No se pudieron cargar las tareas");
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const toggleComplete = (task) => {
-    setTasks(tasks.map((t) => t.id === task.id ? { ...t, completed: !t.completed } : t));
+  const createTask = async () => {
+    if (!newTask.trim()) return;
+
+    try {
+      const response = await axios.post(API_URL, {
+        title: newTask.trim(),
+      });
+
+
+      setTasks([...tasks, response.data]);
+      setNewTask("");
+      setError(null);
+    } catch (err) {
+      console.error("Error al crear tarea:", err);
+      setError("No se pudo crear la tarea");
+    }
+  };
+
+  const toggleComplete = async (task) => {
+    try {
+      const updatedCompleted = !task.completed;
+
+      const response = await axios.put(`${API_URL}/${task.id}`, {
+        completed: updatedCompleted,
+      });
+
+      setTasks(
+        tasks.map((t) =>
+          t.id === task.id ? { ...t, completed: response.data.completed } : t
+        )
+      );
+      setError(null);
+    } catch (err) {
+      console.error("Error al actualizar tarea:", err);
+      setError("No se pudo actualizar la tarea");
+    }
   };
 
   return (
@@ -132,16 +184,30 @@ export default function App() {
             value={newTask}
             onChange={(e) => setNewTask(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && createTask()}
+            disabled={loading}
           />
-          <button className="add-btn" onClick={createTask}>+</button>
+          <button
+            className="add-btn"
+            onClick={createTask}
+            disabled={loading || !newTask.trim()}
+          >
+            +
+          </button>
         </div>
 
-        {tasks.length === 0 ? (
+        {error && <p style={{ color: "red", textAlign: "center" }}>{error}</p>}
+
+        {loading ? (
+          <p className="empty">Cargando tareas...</p>
+        ) : tasks.length === 0 ? (
           <p className="empty">sin tareas pendientes</p>
         ) : (
           <ul className="task-list">
             {tasks.map((task) => (
-              <li key={task.id} className={`task-item ${task.completed ? "done" : ""}`}>
+              <li
+                key={task.id}
+                className={`task-item ${task.completed ? "done" : ""}`}
+              >
                 <input
                   type="checkbox"
                   className="task-check"
@@ -154,9 +220,10 @@ export default function App() {
           </ul>
         )}
 
-        {tasks.length > 0 && (
+        {tasks.length > 0 && !loading && (
           <p className="counter">
-            {tasks.filter((t) => !t.completed).length} pendientes · {tasks.length} total
+            {tasks.filter((t) => !t.completed).length} pendientes ·{" "}
+            {tasks.length} total
           </p>
         )}
       </div>
